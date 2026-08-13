@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f13">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Range Trainer</title>
+<style>
+  :root{
+    --bg:#0d0f13; --panel:#14171c; --panel-2:#191d23; --border:#242830;
+    --text:#e8eaee; --muted:#8a919e; --faint:#5c6370;
+    --raise:#d64550; --raise-dim:#5a2328;
+    --call:#3d9a50;  --call-dim:#1f4a29;
+    --fold:#4f74e3;  --fold-dim:#232c4d;
+    --radius:10px;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--text);font-family:var(--sans);
+    display:flex;flex-direction:column;align-items:center;
+    padding:max(12px,env(safe-area-inset-top)) 12px max(20px,env(safe-area-inset-bottom));
+  }
+  .app{width:100%;max-width:600px;display:flex;flex-direction:column;gap:14px}
+
+  /* header */
+  header{display:flex;align-items:center;justify-content:space-between;padding:4px 2px}
+  .brand{font-family:var(--mono);font-size:14px;letter-spacing:.08em;color:var(--muted)}
+  .brand b{color:var(--text);font-weight:600}
+  .tabs{display:flex;background:var(--panel);border:1px solid var(--border);border-radius:99px;padding:3px}
+  .tabs button{
+    border:0;background:transparent;color:var(--muted);font:600 13px var(--sans);
+    padding:7px 18px;border-radius:99px;cursor:pointer;transition:.15s;
+  }
+  .tabs button.on{background:var(--panel-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--border)}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .grow{flex:1}
+
+  select,.btn{
+    font:600 13px var(--sans);color:var(--text);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:8px;padding:9px 12px;cursor:pointer;
+  }
+  select{min-width:0;appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a919e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;padding-right:26px}
+  .btn:active{transform:translateY(1px)}
+  .btn.icon{padding:9px 11px;color:var(--muted)}
+  .btn.danger:hover{color:var(--raise)}
+
+  /* action picker */
+  .actions{display:flex;gap:8px}
+  .actions button{
+    flex:1;border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
+    font:700 13px var(--sans);letter-spacing:.04em;padding:11px 0;border-radius:8px;cursor:pointer;transition:.12s;
+  }
+  .actions button[data-a=raise].on{background:var(--raise);border-color:var(--raise);color:#fff}
+  .actions button[data-a=call].on {background:var(--call); border-color:var(--call); color:#fff}
+  .actions button[data-a=fold].on {background:var(--fold); border-color:var(--fold); color:#fff}
+
+  /* grid */
+  .grid{
+    display:grid;grid-template-columns:repeat(13,1fr);gap:2px;
+    touch-action:none;user-select:none;-webkit-user-select:none;
+  }
+  .cell{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    font:600 clamp(7.5px,2.1vw,11px) var(--mono);border-radius:4px;cursor:pointer;
+    background:var(--fold-dim);color:#7d8bc4;transition:background .08s;
+  }
+  .cell.raise{background:var(--raise);color:#fff}
+  .cell.call{background:var(--call);color:#fff}
+  .stats{display:flex;gap:14px;font:500 12px var(--mono);color:var(--muted);padding-top:10px;flex-wrap:wrap}
+  .stats i{font-style:normal;display:inline-flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+  .hint{font:400 11.5px var(--sans);color:var(--faint);text-align:center;padding-top:2px}
+  .notes{
+    width:100%;min-height:72px;margin-top:12px;background:var(--bg);color:var(--text);
+    border:1px solid var(--border);border-radius:8px;font:13px/1.5 var(--sans);
+    padding:10px;resize:vertical;
+  }
+  .notes::placeholder{color:var(--faint)}
+  .notes:focus{outline:none;border-color:#3a4150}
+
+  /* trainer */
+  .scene-label{font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:center}
+  .cards{display:flex;gap:10px;justify-content:center;padding:18px 0 6px}
+  .card{
+    width:88px;height:122px;border-radius:12px;background:var(--panel-2);
+    border:1px solid var(--border);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;font-family:var(--mono);
+    box-shadow:0 6px 18px rgba(0,0,0,.35);
+  }
+  .card .r{font-size:40px;font-weight:700;line-height:1}
+  .card .s{font-size:26px;line-height:1}
+  .feedback{min-height:26px;text-align:center;font:700 15px var(--sans)}
+  .feedback.ok{color:var(--call)}
+  .feedback.bad{color:var(--raise)}
+  .score{font:500 12px var(--mono);color:var(--muted);text-align:center}
+  .empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:14px;line-height:1.6}
+
+  /* sync modal */
+  dialog{
+    background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:var(--radius);padding:16px;width:min(92vw,520px);
+  }
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog h3{font-size:14px;margin-bottom:4px}
+  dialog p{font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+  textarea{
+    width:100%;height:140px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;font:12px var(--mono);padding:10px;resize:vertical;
+  }
+  .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+
+  .flash{animation:flash .3s}
+  @keyframes flash{0%{opacity:.4}100%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  @media (max-width:420px){
+    .card{width:74px;height:104px}.card .r{font-size:33px}.card .s{font-size:22px}
+    .panel{padding:11px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand"><b>RANGE</b>&nbsp;TRAINER</div>
+    <div class="tabs">
+      <button id="tabBuild" class="on">Build</button>
+      <button id="tabTrain">Train</button>
+    </div>
+  </header>
+
+  <!-- BUILD -->
+  <section id="viewBuild" class="panel">
+    <div class="row" style="margin-bottom:12px">
+      <select id="scnSelect" class="grow"></select>
+      <button class="btn icon" id="btnNew" title="New range">＋</button>
+      <button class="btn icon" id="btnRename" title="Rename">✎</button>
+      <button class="btn icon danger" id="btnDelete" title="Delete">🗑</button>
+    </div>
+    <div class="actions" style="margin-bottom:12px">
+      <button data-a="raise">RAISE</button>
+      <button data-a="call">CALL</button>
+      <button data-a="fold">FOLD</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="stats" id="stats"></div>
+    <textarea id="notes" class="notes" placeholder="Notes — memory hooks, boundary hands, reasoning…" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:12px">
+      <button class="btn grow" id="btnClear">Clear to fold</button>
+      <button class="btn grow" id="btnSync">Export / Import</button>
+    </div>
+    <div class="hint" id="hint">Pick an action, then tap or drag across the grid to paint</div>
+  </section>
+
+  <!-- TRAIN -->
+  <section id="viewTrain" class="panel" style="display:none">
+    <div class="row" style="margin-bottom:8px">
+      <select id="trainSelect" class="grow"></select>
+    </div>
+    <div id="trainBody">
+      <div class="scene-label" id="sceneLabel"></div>
+      <div class="cards" id="cards"></div>
+      <div class="feedback" id="feedback"></div>
+      <div class="hint" id="trainHint" style="display:none">select the correct action to continue</div>
+      <div class="actions train-actions" style="margin-top:10px">
+        <button data-a="raise">RAISE</button>
+        <button data-a="call">CALL</button>
+        <button data-a="fold">FOLD</button>
+      </div>
+      <div class="score" id="score" style="margin-top:12px"></div>
+    </div>
+    <div class="empty" id="trainEmpty" style="display:none">
+      No ranges yet.<br>Build one first, then come back to train.
+    </div>
+  </section>
+
+  <!-- SYNC -->
+  <dialog id="syncDlg">
+    <h3>Export / Import ranges</h3>
+    <p>Copy this JSON and paste it into the app on another device to transfer all your ranges. Importing replaces everything.</p>
+    <textarea id="syncText" spellcheck="false"></textarea>
+    <div class="modal-btns">
+      <button class="btn" id="btnCopy">Copy</button>
+      <button class="btn" id="btnImport">Import</button>
+      <button class="btn" id="btnCloseDlg">Close</button>
+    </div>
+  </dialog>
+
+</div>
+
+<script>
+"use strict";
+(function(){
+
+/* ---------- constants ---------- */
+var RANKS = ["A","K","Q","J","T","9","8","7","6","5","4","3","2"];
+var SUITS = [
+  {sym:"\u2660", color:"#dfe3ea"},  // spades
+  {sym:"\u2665", color:"#e5484d"},  // hearts
+  {sym:"\u2666", color:"#4f8ef7"},  // diamonds
+  {sym:"\u2663", color:"#46a758"}   // clubs
+];
+var KEY = "rangeTrainer.v1";
+
+function handLabel(row, col){
+  if(row === col) return RANKS[row] + RANKS[row];
+  if(col > row)  return RANKS[row] + RANKS[col] + "s";
+  return RANKS[col] + RANKS[row] + "o";
+}
+function combosOf(hand){
+  if(hand.length === 2) return 6;
+  return hand.charAt(2) === "s" ? 4 : 12;
+}
+
+/* ---------- state ---------- */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function loadDB(){
+  try{
+    var raw = localStorage.getItem(KEY);
+    if(raw){
+      var d = JSON.parse(raw);
+      if(d && Array.isArray(d.scenarios)) return d;
+    }
+  }catch(e){}
+  return { scenarios: [] };
+}
+function saveDB(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} }
+
+var db = loadDB();
+var activeId = db.scenarios.length ? db.scenarios[0].id : null;
+var paintAction = null;      /* null = locked, no action selected */
+var painting = false;
+
+function active(){
+  for(var i=0;i<db.scenarios.length;i++) if(db.scenarios[i].id===activeId) return db.scenarios[i];
+  return null;
+}
+function actionFor(scn, hand){ return (scn.range && scn.range[hand]) || "fold"; }
+function setAction(scn, hand, a){
+  if(!scn.range) scn.range = {};
+  if(a === "fold") delete scn.range[hand];
+  else scn.range[hand] = a;
+}
+
+/* ---------- DOM refs ---------- */
+function $(id){ return document.getElementById(id); }
+var grid=$("grid"), statsEl=$("stats"), scnSelect=$("scnSelect"),
+    trainSelect=$("trainSelect"), cardsEl=$("cards"), feedbackEl=$("feedback"),
+    scoreEl=$("score"), sceneLabel=$("sceneLabel"), trainHint=$("trainHint"),
+    syncDlg=$("syncDlg"), syncText=$("syncText");
+
+/* ---------- build: grid ---------- */
+var cells = {};
+(function buildGrid(){
+  for(var r=0;r<13;r++){
+    for(var c=0;c<13;c++){
+      var h = handLabel(r,c);
+      var el = document.createElement("div");
+      el.className = "cell";
+      el.dataset.hand = h;
+      el.textContent = h;
+      cells[h] = el;
+      grid.appendChild(el);
+    }
+  }
+})();
+
+function renderGrid(){
+  var scn = active();
+  for(var h in cells){
+    var a = scn ? actionFor(scn, h) : "fold";
+    cells[h].className = "cell" + (a==="fold" ? "" : " "+a);
+  }
+  renderStats();
+  renderNotes();
+}
+function renderStats(){
+  var scn = active();
+  var tot = {raise:0, call:0, fold:0};
+  if(scn){
+    for(var h in cells) tot[actionFor(scn,h)] += combosOf(h);
+  }
+  var pct = function(n){ return (100*n/1326).toFixed(1)+"%"; };
+  statsEl.innerHTML =
+    '<i><span class="dot" style="background:var(--raise)"></span>Raise '+pct(tot.raise)+'</i>'+
+    '<i><span class="dot" style="background:var(--call)"></span>Call '+pct(tot.call)+'</i>'+
+    '<i><span class="dot" style="background:var(--fold)"></span>Fold '+pct(tot.fold)+'</i>';
+}
+
+/* painting (mouse + touch via pointer events)
+   Toggle rule: pressing a cell that already has the selected action starts a
+   stroke that paints FOLD instead, so re-clicking undoes mistakes. */
+var strokeAction = "raise";
+function cellAt(x,y){
+  var el = document.elementFromPoint(x,y);
+  return (el && el.dataset && el.dataset.hand) ? el : null;
+}
+function paintCell(el){
+  var scn = active(); if(!scn) return;
+  var h = el.dataset.hand;
+  if(actionFor(scn, h) !== strokeAction){
+    setAction(scn, h, strokeAction);
+    el.className = "cell" + (strokeAction==="fold" ? "" : " "+strokeAction);
+    renderStats();
+  }
+}
+grid.addEventListener("pointerdown", function(e){
+  if(!paintAction) return;                 /* nothing selected: grid locked */
+  if(!active()){ newScenario(); if(!active()) return; }
+  var el = cellAt(e.clientX, e.clientY);
+  if(!el) return;
+  painting = true;
+  try{ e.target.releasePointerCapture(e.pointerId); }catch(err){}
+  strokeAction = (actionFor(active(), el.dataset.hand) === paintAction) ? "fold" : paintAction;
+  paintCell(el);
+  e.preventDefault();
+});
+grid.addEventListener("pointermove", function(e){
+  if(!painting) return;
+  var el = cellAt(e.clientX, e.clientY);
+  if(el) paintCell(el);
+});
+window.addEventListener("pointerup", function(){ if(painting){ painting=false; saveDB(); } });
+window.addEventListener("pointercancel", function(){ if(painting){ painting=false; saveDB(); } });
+
+/* action picker — clicking the active button deselects it (no editing) */
+var buildBtns = document.querySelectorAll("#viewBuild .actions button");
+var hintEl = $("hint");
+function renderHint(){
+  hintEl.textContent = paintAction
+    ? "Pick an action, then tap or drag across the grid to paint"
+    : "No action selected — grid is locked";
+}
+buildBtns.forEach(function(b){
+  b.addEventListener("click", function(){
+    paintAction = (paintAction === b.dataset.a) ? null : b.dataset.a;
+    buildBtns.forEach(function(x){ x.classList.toggle("on", x.dataset.a === paintAction); });
+    renderHint();
+  });
+});
+function lockPainting(){
+  paintAction = null;
+  buildBtns.forEach(function(x){ x.classList.remove("on"); });
+  renderHint();
+}
+
+/* notes (auto-saved per range) */
+var notesEl = $("notes");
+var notesTimer = null;
+function renderNotes(){
+  var scn = active();
+  notesEl.value = scn ? (scn.notes || "") : "";
+  notesEl.disabled = !scn;
+}
+notesEl.addEventListener("input", function(){
+  var scn = active(); if(!scn) return;
+  scn.notes = notesEl.value;
+  clearTimeout(notesTimer);
+  notesTimer = setTimeout(saveDB, 400);
+});
+notesEl.addEventListener("blur", function(){ clearTimeout(notesTimer); saveDB(); });
+
+/* ---------- scenarios ---------- */
+function renderScenarioSelects(){
+  scnSelect.innerHTML = "";
+  db.scenarios.forEach(function(s){
+    var o = document.createElement("option");
+    o.value = s.id; o.textContent = s.name;
+    scnSelect.appendChild(o);
+  });
+  if(!db.scenarios.length){
+    var o = document.createElement("option");
+    o.textContent = "No ranges yet — tap ＋"; o.value = "";
+    scnSelect.appendChild(o);
+  }
+  if(activeId) scnSelect.value = activeId;
+
+  var prev = trainSelect.value;
+  trainSelect.innerHTML = "";
+  var all = document.createElement("option");
+  all.value = "__all__"; all.textContent = "All ranges (random)";
+  trainSelect.appendChild(all);
+  db.scenarios.forEach(function(s){
+    var o = document.createElement("option");
+    o.value = s.id; o.textContent = s.name;
+    trainSelect.appendChild(o);
+  });
+  trainSelect.value = prev && (prev==="__all__" || db.scenarios.some(function(s){return s.id===prev;})) ? prev : "__all__";
+}
+scnSelect.addEventListener("change", function(){ activeId = scnSelect.value || null; lockPainting(); renderGrid(); });
+
+function newScenario(){
+  var name = prompt("Name this range (e.g. CO RFI, BTN vs SB 3bet):");
+  if(!name) return;
+  var s = { id: uid(), name: name.trim(), range: {}, notes: "" };
+  db.scenarios.push(s);
+  activeId = s.id;
+  saveDB(); lockPainting(); renderScenarioSelects(); renderGrid();
+}
+$("btnNew").addEventListener("click", newScenario);
+$("btnRename").addEventListener("click", function(){
+  var scn = active(); if(!scn) return;
+  var name = prompt("Rename range:", scn.name);
+  if(name){ scn.name = name.trim(); saveDB(); renderScenarioSelects(); }
+});
+$("btnDelete").addEventListener("click", function(){
+  var scn = active(); if(!scn) return;
+  if(!confirm('Delete "'+scn.name+'"? This cannot be undone.')) return;
+  db.scenarios = db.scenarios.filter(function(s){ return s.id!==scn.id; });
+  activeId = db.scenarios.length ? db.scenarios[0].id : null;
+  saveDB(); lockPainting(); renderScenarioSelects(); renderGrid();
+});
+$("btnClear").addEventListener("click", function(){
+  var scn = active(); if(!scn) return;
+  if(!confirm("Reset every hand in this range to fold?")) return;
+  scn.range = {}; saveDB(); renderGrid();
+});
+
+/* ---------- sync ---------- */
+$("btnSync").addEventListener("click", function(){
+  syncText.value = JSON.stringify(db);
+  syncDlg.showModal();
+});
+$("btnCopy").addEventListener("click", function(){
+  syncText.select();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(syncText.value);
+  } else { document.execCommand("copy"); }
+  $("btnCopy").textContent = "Copied ✓";
+  setTimeout(function(){ $("btnCopy").textContent = "Copy"; }, 1200);
+});
+$("btnImport").addEventListener("click", function(){
+  var txt = syncText.value.trim();
+  try{
+    var d = JSON.parse(txt);
+    if(!d || !Array.isArray(d.scenarios)) throw new Error("bad");
+    if(!confirm("Replace all ranges on this device with the pasted data?")) return;
+    db = d;
+    activeId = db.scenarios.length ? db.scenarios[0].id : null;
+    saveDB(); lockPainting(); renderScenarioSelects(); renderGrid(); resetTrainer();
+    syncDlg.close();
+  }catch(e){
+    alert("That doesn't look like valid exported data. Paste the full JSON exactly as copied.");
+  }
+});
+$("btnCloseDlg").addEventListener("click", function(){ syncDlg.close(); });
+
+/* ---------- trainer ---------- */
+var score = {ok:0, total:0};
+var current = null; // {scn, cards:[{r,s},{r,s}], hand, answered}
+
+function dealCards(){
+  var a = Math.floor(Math.random()*52), b;
+  do{ b = Math.floor(Math.random()*52); }while(b===a);
+  var c1 = {r:Math.floor(a/4), s:a%4}, c2 = {r:Math.floor(b/4), s:b%4};
+  if(c2.r < c1.r){ var t=c1; c1=c2; c2=t; }  // lower index = higher rank first
+  return [c1,c2];
+}
+function cardsToHand(cs){
+  var c1=cs[0], c2=cs[1];
+  if(c1.r===c2.r) return RANKS[c1.r]+RANKS[c1.r];
+  return RANKS[c1.r]+RANKS[c2.r]+(c1.s===c2.s ? "s" : "o");
+}
+function pickScenario(){
+  if(!db.scenarios.length) return null;
+  var v = trainSelect.value;
+  if(v!=="__all__"){
+    for(var i=0;i<db.scenarios.length;i++) if(db.scenarios[i].id===v) return db.scenarios[i];
+  }
+  return db.scenarios[Math.floor(Math.random()*db.scenarios.length)];
+}
+function renderCards(cs){
+  cardsEl.innerHTML = "";
+  cs.forEach(function(c){
+    var suit = SUITS[c.s];
+    var el = document.createElement("div");
+    el.className = "card flash";
+    el.innerHTML = '<div class="r" style="color:'+suit.color+'">'+RANKS[c.r]+'</div>'+
+                   '<div class="s" style="color:'+suit.color+'">'+suit.sym+'</div>';
+    cardsEl.appendChild(el);
+  });
+}
+var trainBtns = document.querySelectorAll("#viewTrain .actions button");
+function nextHand(){
+  var scn = pickScenario();
+  var has = !!scn;
+  $("trainBody").style.display = has ? "" : "none";
+  $("trainEmpty").style.display = has ? "none" : "";
+  if(!has) return;
+  var cs = dealCards();
+  current = { scn:scn, cards:cs, hand:cardsToHand(cs), answered:false };
+  sceneLabel.textContent = scn.name;
+  renderCards(cs);
+  feedbackEl.textContent = ""; feedbackEl.className = "feedback";
+  trainHint.style.display = "none";
+  renderScore();
+}
+function renderScore(){
+  scoreEl.textContent = score.total ? "Session: "+score.ok+" / "+score.total : "Session: —";
+}
+function answer(a){
+  if(!current) return;
+  var correct = actionFor(current.scn, current.hand);
+  if(current.answered){
+    /* wrong state: only the correct action advances */
+    if(a === correct) nextHand();
+    return;
+  }
+  score.total++;
+  if(a === correct){
+    score.ok++;
+    nextHand();          /* instant, no feedback */
+    return;
+  }
+  current.answered = true;
+  feedbackEl.textContent = "Wrong — "+current.hand+" is "+correct.toUpperCase();
+  feedbackEl.className = "feedback bad";
+  trainHint.style.display = "";
+  renderScore();
+}
+trainBtns.forEach(function(b){
+  b.addEventListener("click", function(){ answer(b.dataset.a); });
+});
+trainSelect.addEventListener("change", function(){ score={ok:0,total:0}; nextHand(); });
+
+function resetTrainer(){ score={ok:0,total:0}; if(onTrain) nextHand(); }
+
+/* keyboard shortcuts (desktop) */
+document.addEventListener("keydown", function(e){
+  if(!onTrain || syncDlg.open) return;
+  var k = e.key.toLowerCase();
+  if(k==="r") answer("raise");
+  else if(k==="c") answer("call");
+  else if(k==="f") answer("fold");
+});
+
+/* ---------- tabs ---------- */
+var onTrain = false;
+function showTab(train){
+  onTrain = train;
+  $("viewBuild").style.display = train ? "none" : "";
+  $("viewTrain").style.display = train ? "" : "none";
+  $("tabBuild").classList.toggle("on", !train);
+  $("tabTrain").classList.toggle("on", train);
+  if(train) nextHand();
+}
+$("tabBuild").addEventListener("click", function(){ showTab(false); });
+$("tabTrain").addEventListener("click", function(){ showTab(true); });
+
+/* ---------- init ---------- */
+renderScenarioSelects();
+renderGrid();
+renderHint();
+
+})();
+</script>
+</body>
+</html>
