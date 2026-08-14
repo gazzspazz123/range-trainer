@@ -62,6 +62,12 @@
   .actions button[data-a=raise].on{background:var(--raise);border-color:var(--raise);color:#fff}
   .actions button[data-a=call].on {background:var(--call); border-color:var(--call); color:#fff}
   .actions button[data-a=fold].on {background:var(--fold); border-color:var(--fold); color:#fff}
+  .mode{display:flex;gap:8px}
+  .mode button{
+    flex:1;border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
+    font:600 12.5px var(--sans);padding:9px 0;border-radius:8px;cursor:pointer;transition:.12s;
+  }
+  .mode button.on{color:var(--text);box-shadow:inset 0 0 0 1px #3a4150;background:var(--panel-2)}
 
   /* grid */
   .grid{
@@ -165,6 +171,10 @@
   <section id="viewTrain" class="panel" style="display:none">
     <div class="row" style="margin-bottom:8px">
       <select id="trainSelect" class="grow"></select>
+    </div>
+    <div class="mode" id="modeToggle" style="margin-bottom:8px">
+      <button data-m="any" class="on">Any two cards</button>
+      <button data-m="border">Border hands</button>
     </div>
     <div id="trainBody">
       <div class="scene-label" id="sceneLabel"></div>
@@ -466,6 +476,48 @@ function dealCards(){
   if(c2.r < c1.r){ var t=c1; c1=c2; c2=t; }  // lower index = higher rank first
   return [c1,c2];
 }
+/* border hands: cells whose action differs from any of their 8 grid neighbours */
+function borderHands(scn){
+  var out = [];
+  for(var r=0;r<13;r++){
+    for(var c=0;c<13;c++){
+      var h = handLabel(r,c), a = actionFor(scn,h), edge = false;
+      for(var dr=-1;dr<=1 && !edge;dr++){
+        for(var dc=-1;dc<=1;dc++){
+          if(dr===0 && dc===0) continue;
+          var nr=r+dr, nc=c+dc;
+          if(nr<0||nr>12||nc<0||nc>12) continue;
+          if(actionFor(scn, handLabel(nr,nc)) !== a){ edge = true; break; }
+        }
+      }
+      if(edge) out.push(h);
+    }
+  }
+  return out;
+}
+function weightedPick(hands){
+  var tot = 0, i;
+  for(i=0;i<hands.length;i++) tot += combosOf(hands[i]);
+  var x = Math.random()*tot;
+  for(i=0;i<hands.length;i++){ x -= combosOf(hands[i]); if(x<0) return hands[i]; }
+  return hands[hands.length-1];
+}
+function cardsForHand(h){
+  var r1 = RANKS.indexOf(h.charAt(0)), r2 = RANKS.indexOf(h.charAt(1));
+  var s1, s2;
+  if(h.length===2){                       // pair: two distinct suits
+    s1 = Math.floor(Math.random()*4);
+    do{ s2 = Math.floor(Math.random()*4); }while(s2===s1);
+    return [{r:r1,s:s1},{r:r1,s:s2}];
+  }
+  if(h.charAt(2)==="s"){                  // suited: same suit
+    s1 = Math.floor(Math.random()*4);
+    return [{r:r1,s:s1},{r:r2,s:s1}];
+  }
+  s1 = Math.floor(Math.random()*4);       // offsuit: distinct suits
+  do{ s2 = Math.floor(Math.random()*4); }while(s2===s1);
+  return [{r:r1,s:s1},{r:r2,s:s2}];
+}
 function cardsToHand(cs){
   var c1=cs[0], c2=cs[1];
   if(c1.r===c2.r) return RANKS[c1.r]+RANKS[c1.r];
@@ -491,13 +543,20 @@ function renderCards(cs){
   });
 }
 var trainBtns = document.querySelectorAll("#viewTrain .actions button");
+var dealMode = "any";   // "any" | "border"
 function nextHand(){
   var scn = pickScenario();
   var has = !!scn;
   $("trainBody").style.display = has ? "" : "none";
   $("trainEmpty").style.display = has ? "none" : "";
   if(!has) return;
-  var cs = dealCards();
+  var cs;
+  if(dealMode==="border"){
+    var bh = borderHands(scn);
+    cs = bh.length ? cardsForHand(weightedPick(bh)) : dealCards();
+  }else{
+    cs = dealCards();
+  }
   current = { scn:scn, cards:cs, hand:cardsToHand(cs), answered:false };
   sceneLabel.textContent = scn.name;
   renderCards(cs);
@@ -529,9 +588,20 @@ function answer(a){
   renderScore();
 }
 trainBtns.forEach(function(b){
-  b.addEventListener("click", function(){ answer(b.dataset.a); });
+  b.addEventListener("click", function(){ answer(b.dataset.a); b.blur(); });
 });
-trainSelect.addEventListener("change", function(){ score={ok:0,total:0}; nextHand(); });
+var modeBtns = document.querySelectorAll("#modeToggle button");
+modeBtns.forEach(function(b){
+  b.addEventListener("click", function(){
+    if(dealMode === b.dataset.m){ b.blur(); return; }
+    dealMode = b.dataset.m;
+    modeBtns.forEach(function(x){ x.classList.toggle("on", x.dataset.m===dealMode); });
+    score = {ok:0, total:0};
+    nextHand();
+    b.blur();
+  });
+});
+trainSelect.addEventListener("change", function(){ score={ok:0,total:0}; trainSelect.blur(); nextHand(); });
 
 function resetTrainer(){ score={ok:0,total:0}; if(onTrain) nextHand(); }
 
@@ -539,6 +609,13 @@ function resetTrainer(){ score={ok:0,total:0}; if(onTrain) nextHand(); }
 document.addEventListener("keydown", function(e){
   if(!onTrain || syncDlg.open) return;
   var k = e.key.toLowerCase();
+  var ae = document.activeElement;
+  if(ae && (ae.tagName==="SELECT" || ae.tagName==="INPUT" || ae.tagName==="TEXTAREA")){
+    /* the scenario dropdown steals letter keys for option type-ahead
+       (pressing C jumped to "CO ..."): intercept R/C/F, blur, and answer */
+    if(ae===trainSelect && (k==="r"||k==="c"||k==="f")){ e.preventDefault(); ae.blur(); }
+    else return;
+  }
   if(k==="r") answer("raise");
   else if(k==="c") answer("call");
   else if(k==="f") answer("fold");
