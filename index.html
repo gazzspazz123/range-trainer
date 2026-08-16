@@ -476,31 +476,32 @@ function dealCards(){
   if(c2.r < c1.r){ var t=c1; c1=c2; c2=t; }  // lower index = higher rank first
   return [c1,c2];
 }
-/* border hands: cells whose action differs from any of their 8 grid neighbours */
+/* border hands: cells whose action differs from a directly adjacent cell
+   (same row/column only — diagonal touches were letting easy hands in).
+   Each hand also gets a heat score = how many of its 4 neighbours disagree,
+   so corner/contested cells come up more often than long straight edges. */
 function borderHands(scn){
   var out = [];
+  var DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
   for(var r=0;r<13;r++){
     for(var c=0;c<13;c++){
-      var h = handLabel(r,c), a = actionFor(scn,h), edge = false;
-      for(var dr=-1;dr<=1 && !edge;dr++){
-        for(var dc=-1;dc<=1;dc++){
-          if(dr===0 && dc===0) continue;
-          var nr=r+dr, nc=c+dc;
-          if(nr<0||nr>12||nc<0||nc>12) continue;
-          if(actionFor(scn, handLabel(nr,nc)) !== a){ edge = true; break; }
-        }
+      var h = handLabel(r,c), a = actionFor(scn,h), heat = 0;
+      for(var i=0;i<4;i++){
+        var nr=r+DIRS[i][0], nc=c+DIRS[i][1];
+        if(nr<0||nr>12||nc<0||nc>12) continue;
+        if(actionFor(scn, handLabel(nr,nc)) !== a) heat++;
       }
-      if(edge) out.push(h);
+      if(heat) out.push({h:h, w:combosOf(h)*heat});
     }
   }
   return out;
 }
-function weightedPick(hands){
+function weightedPick(items){
   var tot = 0, i;
-  for(i=0;i<hands.length;i++) tot += combosOf(hands[i]);
+  for(i=0;i<items.length;i++) tot += items[i].w;
   var x = Math.random()*tot;
-  for(i=0;i<hands.length;i++){ x -= combosOf(hands[i]); if(x<0) return hands[i]; }
-  return hands[hands.length-1];
+  for(i=0;i<items.length;i++){ x -= items[i].w; if(x<0) return items[i].h; }
+  return items[items.length-1].h;
 }
 function cardsForHand(h){
   var r1 = RANKS.indexOf(h.charAt(0)), r2 = RANKS.indexOf(h.charAt(1));
